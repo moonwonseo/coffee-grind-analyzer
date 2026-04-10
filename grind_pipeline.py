@@ -194,6 +194,107 @@ def segment_particles(
     return particles
 
 
+def split_clusters(
+    particles: list[dict],
+    px_per_mm: float,
+    max_particle_mm: float = 2.0,
+) -> list[dict]:
+    """
+    Post-process detected particles: split large clusters into individual
+    grounds using watershed segmentation.
+
+    The YOLOv8 model (trained on seeds/grains) often detects clumps of
+    coffee grounds as a single particle. This function identifies oversized
+    detections and uses distance-transform + watershed to split them.
+
+    Args:
+        particles:       list of particle dicts from segment_particles()
+        px_per_mm:       scale from quarter detection
+        max_particle_mm: particles with equiv. diameter above this are
+                         candidates for splitting (default 2.0mm = 2000µm)
+    Returns:
+        Updated particle list with clusters split into sub-particles.
+    """
+    max_area_px = np.pi * (max_particle_mm * px_per_mm / 2) ** 2
+    # Minimum area: skip sub-regions smaller than ~50µm diameter
+    min_diameter_mm = 0.05  # 50µm
+    min_area_px = np.pi * (min_diameter_mm * px_per_mm / 2) ** 2
+
+    out = []
+    n_split = 0
+
+    for p in particles:
+        if p["area_px"] <= max_area_px:
+            # Small enough to be a single particle — keep as-is
+            if p["area_px"] >= min_area_px:
+                out.append(p)
+            continue
+
+        # This region is too large — try to split it
+        mask = p["mask"]
+
+        # Distance transform: peaks = particle centers
+        dist = cv2.distanceTransform(mask, cv2.DIST_L2, 5)
+
+        # Threshold to find sure foreground (particle cores)
+        _, sure_fg = cv2.threshold(dist, 0.35 * dist.max(), 255, 0)
+        sure_fg = sure_fg.astype(np.uint8)
+
+        # Find individual cores via connected components
+        n_labels, labels = cv2.connectedComponents(sure_fg)
+
+        if n_labels <= 2:
+            # Only one core found — can't split, keep original
+            out.append(p)
+            continue
+
+        # Watershed needs markers: background=0, unknown=-1 (in OpenCV: 0)
+        # We'll use the connected components as markers
+        markers = labels.copy().astype(np.int32)
+        # Mark unknown regions (part of mask but not sure foreground)
+        markers[mask == 1] = np.where(
+            markers[mask == 1] > 0, markers[mask == 1], 0
+        )
+        # Background = 1 (watershed convention)
+        markers[mask == 0] = 1
+
+        # Watershed needs a 3-channel image
+        mask_3ch = cv2.cvtColor(mask * 255, cv2.COLOR_GRAY2BGR)
+        cv2.watershed(mask_3ch, markers)
+
+        # Extract each sub-particle (labels 2..n_labels)
+        for label_id in range(2, n_labels + 1):
+            sub_mask = (markers == label_id).astype(np.uint8)
+            sub_area = int(sub_mask.sum())
+
+            if sub_area < min_area_px:
+                continue
+
+            sub_diameter = 2 * np.sqrt(sub_area / np.pi)
+
+            # Compute bounding box of this sub-mask
+            ys, xs = np.where(sub_mask)
+            if len(xs) == 0:
+                continue
+            bbox = [int(xs.min()), int(ys.min()), int(xs.max()), int(ys.max())]
+
+            out.append({
+                "mask": sub_mask,
+                "area_px": sub_area,
+                "diameter_px": sub_diameter,
+                "bbox": bbox,
+            })
+
+        n_split += 1
+
+    if n_split > 0:
+        print(f"[Cluster Split] Split {n_split} oversized regions → {len(out)} total particles (was {len(particles)})")
+    else:
+        print(f"[Cluster Split] No oversized regions found, {len(out)} particles retained.")
+
+    return out
+
+
 # ─────────────────────────────────────────────────────────────
 # STEP 3: CONVERT TO MICRONS
 # ─────────────────────────────────────────────────────────────

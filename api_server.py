@@ -29,6 +29,7 @@ from pydantic import BaseModel
 from grind_pipeline import (
     detect_quarter,
     segment_particles,
+    split_clusters,
     compute_diameters_um,
     compute_psd,
     classify_grind,
@@ -156,12 +157,15 @@ async def analyze_photo(
 
         # Step 2: Particle segmentation
         model = get_model()
-        particles = segment_particles(image, model, conf_threshold=0.25)
-        if not particles:
+        raw_particles = segment_particles(image, model, conf_threshold=0.25)
+        if not raw_particles:
             raise HTTPException(
                 status_code=422,
                 detail="No particles detected. Make sure grounds are spread on a white surface."
             )
+
+        # Step 2b: Split oversized clusters into individual particles
+        particles = split_clusters(raw_particles, px_per_mm)
 
         # Step 3: Convert to microns
         diameters_um = compute_diameters_um(particles, px_per_mm)
