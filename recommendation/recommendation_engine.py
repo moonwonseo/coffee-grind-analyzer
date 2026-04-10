@@ -65,6 +65,10 @@ def recommend_filter(payload: Dict[str, Any], rules: Dict[str, Any] | None = Non
       - taste_feedback (str | list[str])
 
     Optional:
+      - psd_stats (dict): distribution stats from grind_pipeline.compute_psd().
+        If provided, the engine checks uniformity before recommending grind changes.
+        Expected keys: fines_pct, boulders_pct, uniform_pct, bimodal_flag,
+                       uniformity ('good'/'moderate'/'poor'), span.
       - drawdown_time_s
       - water_temp_c
       - dose_g
@@ -113,6 +117,15 @@ def recommend_filter(payload: Dict[str, Any], rules: Dict[str, Any] | None = Non
     mixed = groups["mixed_signals"]
     balanced = groups["balanced_signals"]
 
+    # Extract optional PSD distribution stats
+    psd_stats = payload.get("psd_stats", {})
+    bimodal_flag = psd_stats.get("bimodal_flag", False)
+    uniformity = psd_stats.get("uniformity", "unknown")
+    fines_pct = psd_stats.get("fines_pct", 0)
+    boulders_pct = psd_stats.get("boulders_pct", 0)
+    uniform_pct = psd_stats.get("uniform_pct", 100)
+    span = psd_stats.get("span", 0)
+
     response: Dict[str, Any] = {
         "mode": "fallback",
         "inputs_used": {
@@ -147,6 +160,13 @@ def recommend_filter(payload: Dict[str, Any], rules: Dict[str, Any] | None = Non
             "grind": "low",
             "secondary": "low",
         },
+        "distribution": {
+            "fines_pct": fines_pct,
+            "uniform_pct": uniform_pct,
+            "boulders_pct": boulders_pct,
+            "bimodal_flag": bimodal_flag,
+            "uniformity": uniformity,
+        },
     }
 
     # 1) Balanced: hold
@@ -178,6 +198,73 @@ def recommend_filter(payload: Dict[str, Any], rules: Dict[str, Any] | None = Non
             "direction": "stabilize",
             "message": messages["mixed_secondary"],
         }
+        response["confidence"] = {"grind": "low", "secondary": "medium"}
+        return response
+
+    # 2.5) Distribution uniformity check — bimodal or very poor uniformity
+    #      means changing grind size won't help; the grinder itself is the issue.
+    if bimodal_flag:
+        response["mode"] = "grinder_issue"
+        response["grind_recommendation"] = {
+            "direction": "hold",
+            "steps": 0,
+            "from_setting": current_setting,
+            "to_setting": current_setting,
+            "message": (
+                f"Your grind has a bimodal distribution: {fines_pct}% fines "
+                f"and {boulders_pct}% boulders. Changing the grind setting "
+                f"won't fix this — check your burr alignment or consider "
+                f"recalibrating your grinder."
+            ),
+        }
+        response["secondary_advice"] = {
+            "shown": True,
+            "type": "grinder_maintenance",
+            "direction": "check",
+            "message": (
+                "A bimodal distribution (lots of very fine AND very coarse particles) "
+                "usually means the burrs are misaligned, worn, or need cleaning. "
+                "Try cleaning and re-seating the burrs before adjusting your grind setting."
+            ),
+        }
+        response["confidence"] = {"grind": "low", "secondary": "high"}
+        return response
+
+    if uniformity == "poor" and not bimodal_flag:
+        response["mode"] = "poor_uniformity"
+        response["grind_recommendation"] = {
+            "direction": "hold" if within_tolerance else ("finer" if final_steps < 0 else "coarser"),
+            "steps": 0 if within_tolerance else abs(final_steps),
+            "from_setting": current_setting,
+            "to_setting": current_setting if within_tolerance else clamped_new_setting,
+            "message": (
+                f"Your grind has wide distribution (span={span:.2f}, uniformity=poor). "
+                f"Only {uniform_pct}% of particles are in the target range. "
+                f"Adjusting temperature or contact time may help more than changing grind size."
+            ),
+        }
+        secondary_step = constants["default_secondary_step"]
+        if _has_any(taste_feedback, under):
+            response["secondary_advice"] = {
+                "shown": True,
+                "type": "temperature",
+                "direction": "increase",
+                "message": f"With poor uniformity and sour notes, try hotter water (+{secondary_step['temperature_c']}°C) or longer contact time (+{secondary_step['contact_time_s']}s).",
+            }
+        elif _has_any(taste_feedback, over):
+            response["secondary_advice"] = {
+                "shown": True,
+                "type": "temperature",
+                "direction": "decrease",
+                "message": f"With poor uniformity and bitter notes, try cooler water (-{secondary_step['temperature_c']}°C) or shorter contact time (-{secondary_step['contact_time_s']}s).",
+            }
+        else:
+            response["secondary_advice"] = {
+                "shown": True,
+                "type": "technique",
+                "direction": "stabilize",
+                "message": "With poor uniformity, focus on consistent technique before changing grind size.",
+            }
         response["confidence"] = {"grind": "low", "secondary": "medium"}
         return response
 
@@ -260,12 +347,20 @@ if __name__ == "__main__":
         "dial_range_min": 1,
         "dial_range_max": 40,
         "taste_feedback": ["sour", "thin"],
+        "psd_stats": {
+            "fines_pct": 5.2,
+            "uniform_pct": 82.1,
+            "boulders_pct": 2.3,
+            "bimodal_flag": False,
+            "uniformity": "good",
+            "span": 0.85,
+        },
         "drawdown_time_s": 170,
         "water_temp_c": 93,
         "dose_g": 20,
         "water_g": 320,
         "agitation_level": "medium",
-        "grinder_model": "Baratza Encore",
+        "grinder_model": "Fellow Ode",
     }
 
     result = recommend_filter(example_payload)

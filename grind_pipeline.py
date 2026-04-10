@@ -213,28 +213,75 @@ def compute_diameters_um(particles: list[dict], px_per_mm: float) -> list[float]
 # STEP 4: PARTICLE SIZE DISTRIBUTION
 # ─────────────────────────────────────────────────────────────
 
+# Distribution category thresholds (µm)
+FINES_THRESHOLD_UM = 200       # particles smaller than this are "fines"
+BOULDER_THRESHOLD_UM = 1000    # particles larger than this are "boulders"
+BIMODAL_FINES_PCT = 15         # if fines% > this AND boulders% > this, flag bimodal
+BIMODAL_BOULDER_PCT = 10
+HIGH_SPAN_THRESHOLD = 1.5      # span above this = poor uniformity
+
+
 def compute_psd(diameters_um: list[float]) -> dict:
     """
     Compute standard PSD statistics from a list of particle diameters (µm).
 
-    Returns dict with D10, D50, D90, mean, std, and histogram arrays.
+    Returns dict with:
+      - D10, D50, D90, mean, std, span
+      - fines_pct:   % of particles < 200 µm
+      - uniform_pct: % of particles between 200–1000 µm
+      - boulders_pct: % of particles > 1000 µm
+      - bimodal_flag: True if high fines AND high boulders (grinder issue)
+      - uniformity:  'good', 'moderate', or 'poor' based on span
     """
     if not diameters_um:
         return {}
 
     arr = np.array(diameters_um)
+    n = len(arr)
+
+    # Standard PSD metrics
+    d10 = float(np.percentile(arr, 10))
+    d50 = float(np.percentile(arr, 50))
+    d90 = float(np.percentile(arr, 90))
+    span = float((d90 - d10) / d50) if d50 > 0 else 0.0
+
+    # Distribution breakdown
+    n_fines = int((arr < FINES_THRESHOLD_UM).sum())
+    n_boulders = int((arr > BOULDER_THRESHOLD_UM).sum())
+    n_uniform = n - n_fines - n_boulders
+
+    fines_pct = round(n_fines / n * 100, 1)
+    boulders_pct = round(n_boulders / n * 100, 1)
+    uniform_pct = round(n_uniform / n * 100, 1)
+
+    # Bimodal flag: lots of fines AND boulders = grinder alignment issue
+    bimodal_flag = (fines_pct > BIMODAL_FINES_PCT and
+                    boulders_pct > BIMODAL_BOULDER_PCT)
+
+    # Uniformity rating from span
+    if span < 1.0:
+        uniformity = "good"
+    elif span < HIGH_SPAN_THRESHOLD:
+        uniformity = "moderate"
+    else:
+        uniformity = "poor"
 
     psd = {
-        "n_particles": len(arr),
-        "D10": float(np.percentile(arr, 10)),
-        "D50": float(np.percentile(arr, 50)),
-        "D90": float(np.percentile(arr, 90)),
+        "n_particles": n,
+        "D10": d10,
+        "D50": d50,
+        "D90": d90,
         "mean_um": float(arr.mean()),
         "std_um": float(arr.std()),
         "min_um": float(arr.min()),
         "max_um": float(arr.max()),
-        "span": float((np.percentile(arr, 90) - np.percentile(arr, 10))
-                      / np.percentile(arr, 50)),  # (D90-D10)/D50
+        "span": span,
+        # Distribution breakdown
+        "fines_pct": fines_pct,
+        "uniform_pct": uniform_pct,
+        "boulders_pct": boulders_pct,
+        "bimodal_flag": bimodal_flag,
+        "uniformity": uniformity,
         "raw_diameters_um": arr.tolist(),
     }
 
@@ -372,6 +419,14 @@ def run_pipeline(
     print(f"  D90                : {psd['D90']:.1f} µm")
     print(f"  Span (D90-D10)/D50 : {psd['span']:.2f}")
     print(f"  Grind category     : {grind_category.upper()}")
+    print(f"{'─'*40}")
+    print(f"  Distribution:")
+    print(f"    Fines   (<{FINES_THRESHOLD_UM}µm)  : {psd['fines_pct']}%")
+    print(f"    Uniform            : {psd['uniform_pct']}%")
+    print(f"    Boulders (>{BOULDER_THRESHOLD_UM}µm): {psd['boulders_pct']}%")
+    print(f"  Uniformity           : {psd['uniformity'].upper()}")
+    if psd['bimodal_flag']:
+        print(f"  ⚠️  BIMODAL distribution detected — possible grinder issue")
     print(f"{'─'*40}\n")
 
     # Plot
