@@ -1,6 +1,7 @@
 <script lang="ts">
   import GrinderDial from './GrinderDial.svelte';
   import { Clock, Thermometer, Droplets, Filter, Coffee, Send } from 'lucide-svelte';
+  import { getSettings, inputTempToCelsius, inputWeightToGrams, displayTempUnit, displayWeightUnit, tempPlaceholder } from '$lib/settings.svelte';
 
   let {
     d50,
@@ -22,6 +23,11 @@
   let tasteNotes = $state('');
   let selectedTags = $state<string[]>([]);
   let submitting = $state(false);
+
+  let settings = $derived(getSettings());
+  let tempUnit = $derived(displayTempUnit());
+  let weightUnit = $derived(displayWeightUnit());
+  let tempPh = $derived(tempPlaceholder());
 
   const QUICK_TAGS = [
     { label: 'Sour', value: 'sour', group: 'under' },
@@ -73,11 +79,11 @@
       brew_method: brewMethod,
       taste_notes: tasteNotes,
       taste_tags: selectedTags.length > 0 ? selectedTags : undefined,
-      water_temp_c: waterTemp ? parseFloat(waterTemp) : undefined,
+      water_temp_c: waterTemp ? inputTempToCelsius(parseFloat(waterTemp)) : undefined,
       extraction_time_s: extractionTimeS,
       filter_type: filterType || undefined,
-      dose_g: doseG ? parseFloat(doseG) : undefined,
-      water_g: waterG ? parseFloat(waterG) : undefined,
+      dose_g: doseG ? inputWeightToGrams(parseFloat(doseG)) : undefined,
+      water_g: waterG ? inputWeightToGrams(parseFloat(waterG)) : undefined,
       num_pours: numPours ? parseInt(numPours) : undefined,
     };
 
@@ -118,9 +124,9 @@
           <Thermometer class="w-3.5 h-3.5 inline mr-1" />Water Temp
         </label>
         <div class="relative">
-          <input id="waterTemp" type="number" bind:value={waterTemp} placeholder="94"
+          <input id="waterTemp" type="number" bind:value={waterTemp} placeholder={tempPh}
             class="w-full border border-neutral-200 rounded-lg px-3 py-2.5 text-sm pr-8 focus:outline-none focus:ring-2 focus:ring-amber-500" />
-          <span class="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-neutral-400">°C</span>
+          <span class="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-neutral-400">{tempUnit}</span>
         </div>
       </div>
       <div>
@@ -146,7 +152,7 @@
         <div class="relative">
           <input id="doseG" type="number" bind:value={doseG} placeholder="20"
             class="w-full border border-neutral-200 rounded-lg px-3 py-2.5 text-sm pr-6 focus:outline-none focus:ring-2 focus:ring-amber-500" />
-          <span class="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-neutral-400">g</span>
+          <span class="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-neutral-400">{weightUnit}</span>
         </div>
       </div>
       <div>
@@ -156,7 +162,7 @@
         <div class="relative">
           <input id="waterG" type="number" bind:value={waterG} placeholder="320"
             class="w-full border border-neutral-200 rounded-lg px-3 py-2.5 text-sm pr-6 focus:outline-none focus:ring-2 focus:ring-amber-500" />
-          <span class="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-neutral-400">g</span>
+          <span class="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-neutral-400">{weightUnit}</span>
         </div>
       </div>
     </div>

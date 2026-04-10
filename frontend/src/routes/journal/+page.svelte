@@ -2,6 +2,7 @@
   import PageLayout from '$lib/components/PageLayout.svelte';
   import NewEntryDialog from '$lib/components/NewEntryDialog.svelte';
   import { Plus, Calendar, Coffee, Droplets, Thermometer, Clock, ChevronRight } from 'lucide-svelte';
+  import { displayTemp } from '$lib/settings.svelte';
 
   interface JournalEntry {
     id: string; date: string; bean: string; grindSize: string;
@@ -81,7 +82,7 @@
             <div class="grid grid-cols-2 gap-2 text-xs">
               <div class="flex items-center gap-1.5 text-neutral-600"><Coffee class="w-3.5 h-3.5" /><span>{entry.brewMethod}</span></div>
               <div class="flex items-center gap-1.5 text-neutral-600"><Droplets class="w-3.5 h-3.5" /><span>{entry.grindSize}</span></div>
-              <div class="flex items-center gap-1.5 text-neutral-600"><Thermometer class="w-3.5 h-3.5" /><span>{entry.waterTemp}°C</span></div>
+              <div class="flex items-center gap-1.5 text-neutral-600"><Thermometer class="w-3.5 h-3.5" /><span>{displayTemp(entry.waterTemp)}</span></div>
               <div class="flex items-center gap-1.5 text-neutral-600"><Clock class="w-3.5 h-3.5" /><span>{entry.brewTime}</span></div>
             </div>
             <div class="flex flex-wrap gap-1.5">

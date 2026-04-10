@@ -1,11 +1,16 @@
 <script lang="ts">
   import PageLayout from '$lib/components/PageLayout.svelte';
-  import { User, Mail, Coffee, Settings, Bell, Eye, Lock, HelpCircle, LogOut, ChevronRight } from 'lucide-svelte';
+  import { User, Mail, Coffee, Settings, Bell, Eye, Lock, HelpCircle, LogOut, ChevronRight, Thermometer, Scale } from 'lucide-svelte';
+  import { getSettings, updateSettings } from '$lib/settings.svelte';
+  import type { TempUnit, WeightUnit } from '$lib/settings.svelte';
 
-  let notifications = $state(true);
-  let publicProfile = $state(false);
-  let grinder = $state('baratza-encore');
-  let units = $state('metric');
+  let settings = $derived(getSettings());
+
+  function setTempUnit(unit: TempUnit) { updateSettings({ tempUnit: unit }); }
+  function setWeightUnit(unit: WeightUnit) { updateSettings({ weightUnit: unit }); }
+  function setGrinder(e: Event) { updateSettings({ grinder: (e.target as HTMLSelectElement).value }); }
+  function toggleNotifications() { updateSettings({ notifications: !settings.notifications }); }
+  function togglePublicProfile() { updateSettings({ publicProfile: !settings.publicProfile }); }
 </script>
 
 <PageLayout title="Profile">
@@ -45,24 +50,53 @@
         <Coffee class="w-5 h-5 text-amber-700" />
         <h3 class="font-semibold text-amber-900">Grinder Settings</h3>
       </div>
-      <div class="space-y-4">
+      <div class="space-y-5">
         <div>
-          <label class="block text-sm font-medium text-neutral-700 mb-1" for="grinder">Your Grinder</label>
-          <select id="grinder" bind:value={grinder} class="w-full border border-neutral-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-500">
+          <label class="block text-sm font-medium text-neutral-700 mb-1.5" for="grinder">Your Grinder</label>
+          <select id="grinder" value={settings.grinder} onchange={setGrinder} class="w-full border border-neutral-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-amber-500 bg-white">
+            <option value="fellow-ode">Fellow Ode</option>
+            <option value="fellow-ode-gen2">Fellow Ode Gen 2</option>
             <option value="baratza-encore">Baratza Encore</option>
             <option value="baratza-virtuoso">Baratza Virtuoso+</option>
             <option value="comandante">Comandante C40</option>
             <option value="1zpresso">1Zpresso JX-Pro</option>
-            <option value="fellow-ode">Fellow Ode</option>
             <option value="other">Other</option>
           </select>
         </div>
+
+        <!-- Temperature Unit -->
         <div>
-          <label class="block text-sm font-medium text-neutral-700 mb-1" for="units">Measurement Units</label>
-          <select id="units" bind:value={units} class="w-full border border-neutral-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-500">
-            <option value="metric">Metric (μm, °C, g)</option>
-            <option value="imperial">Imperial (microns, °F, oz)</option>
-          </select>
+          <label class="flex items-center gap-1.5 text-sm font-medium text-neutral-700 mb-1.5">
+            <Thermometer class="w-3.5 h-3.5" /> Temperature
+          </label>
+          <div class="grid grid-cols-2 bg-neutral-100 rounded-lg p-1 gap-1">
+            <button
+              onclick={() => setTempUnit('C')}
+              class="py-2 text-sm rounded-md transition-all {settings.tempUnit === 'C' ? 'bg-white text-amber-900 shadow-sm font-medium' : 'text-neutral-600 hover:text-neutral-800'}"
+            >°C — Celsius</button>
+            <button
+              onclick={() => setTempUnit('F')}
+              class="py-2 text-sm rounded-md transition-all {settings.tempUnit === 'F' ? 'bg-white text-amber-900 shadow-sm font-medium' : 'text-neutral-600 hover:text-neutral-800'}"
+            >°F — Fahrenheit</button>
+          </div>
+        </div>
+
+        <!-- Weight Unit -->
+        <div>
+          <label class="flex items-center gap-1.5 text-sm font-medium text-neutral-700 mb-1.5">
+            <Scale class="w-3.5 h-3.5" /> Weight
+          </label>
+          <div class="grid grid-cols-2 bg-neutral-100 rounded-lg p-1 gap-1">
+            <button
+              onclick={() => setWeightUnit('g')}
+              class="py-2 text-sm rounded-md transition-all {settings.weightUnit === 'g' ? 'bg-white text-amber-900 shadow-sm font-medium' : 'text-neutral-600 hover:text-neutral-800'}"
+            >g — Grams</button>
+            <button
+              onclick={() => setWeightUnit('mL')}
+              class="py-2 text-sm rounded-md transition-all {settings.weightUnit === 'mL' ? 'bg-white text-amber-900 shadow-sm font-medium' : 'text-neutral-600 hover:text-neutral-800'}"
+            >mL — Milliliters</button>
+          </div>
+          <p class="text-xs text-neutral-400 mt-1.5">Particle sizes are always shown in μm</p>
         </div>
       </div>
     </div>
@@ -83,10 +117,10 @@
             </div>
           </div>
           <button
-            onclick={() => (notifications = !notifications)}
-            class="relative w-11 h-6 rounded-full transition-colors {notifications ? 'bg-amber-700' : 'bg-neutral-300'}"
+            onclick={toggleNotifications}
+            class="relative w-11 h-6 rounded-full transition-colors {settings.notifications ? 'bg-amber-700' : 'bg-neutral-300'}"
           >
-            <span class="absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform {notifications ? 'translate-x-5' : 'translate-x-0'}"></span>
+            <span class="absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform {settings.notifications ? 'translate-x-5' : 'translate-x-0'}"></span>
           </button>
         </div>
         <hr class="border-neutral-100" />
@@ -99,10 +133,10 @@
             </div>
           </div>
           <button
-            onclick={() => (publicProfile = !publicProfile)}
-            class="relative w-11 h-6 rounded-full transition-colors {publicProfile ? 'bg-amber-700' : 'bg-neutral-300'}"
+            onclick={togglePublicProfile}
+            class="relative w-11 h-6 rounded-full transition-colors {settings.publicProfile ? 'bg-amber-700' : 'bg-neutral-300'}"
           >
-            <span class="absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform {publicProfile ? 'translate-x-5' : 'translate-x-0'}"></span>
+            <span class="absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform {settings.publicProfile ? 'translate-x-5' : 'translate-x-0'}"></span>
           </button>
         </div>
       </div>

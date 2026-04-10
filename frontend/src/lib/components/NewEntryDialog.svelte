@@ -1,5 +1,9 @@
 <script lang="ts">
+  import { displayTempUnit, tempPlaceholder } from '$lib/settings.svelte';
   let { open = $bindable(false), onSave }: { open: boolean; onSave: (entry: any) => void } = $props();
+
+  let tempUnit = $derived(displayTempUnit());
+  let tempPh = $derived(tempPlaceholder());
 
   let formData = $state({
     bean: '',
@@ -61,8 +65,8 @@
         </div>
         <div class="grid grid-cols-2 gap-3">
           <div>
-            <label class="block text-sm font-medium text-neutral-700 mb-1" for="waterTemp">Water Temp (°C)</label>
-            <input id="waterTemp" type="number" bind:value={formData.waterTemp} placeholder="96" required
+            <label class="block text-sm font-medium text-neutral-700 mb-1" for="waterTemp">Water Temp ({tempUnit})</label>
+            <input id="waterTemp" type="number" bind:value={formData.waterTemp} placeholder={tempPh} required
               class="w-full border border-neutral-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-500" />
           </div>
           <div>
